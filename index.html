@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carousel Splitter">
+<title>Carousel Splitter</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one column "light table". Wide preview strip with trim-mark slice lines on top, controls below, slide tiles last. */
+:root {
+  --bg: #eceef1;
+  --surface: #ffffff;
+  --ink: #15181e;
+  --muted: #5a626f;
+  --line: #d3d8de;
+  --accent: #c8105f;
+  --accent-ink: #ffffff;
+  color-scheme: light;
+  --sans: "Instrument Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12141a;
+    --surface: #1a1d25;
+    --ink: #eceef2;
+    --muted: #9aa2b0;
+    --line: #2d323d;
+    --accent: #ff5aa5;
+    --accent-ink: #1c0711;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12141a;
+  --surface: #1a1d25;
+  --ink: #eceef2;
+  --muted: #9aa2b0;
+  --line: #2d323d;
+  --accent: #ff5aa5;
+  --accent-ink: #1c0711;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { color-scheme: light; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.45;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+header { display: flex; flex-direction: column; gap: 6px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand svg { flex: none; color: var(--accent); }
+h1 { margin: 0; font-size: clamp(28px, 6vw, 38px); line-height: 1.05; font-weight: 700; letter-spacing: -0.025em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 52ch; }
+.mono { font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.01em; }
+
+.btn {
+  min-height: 44px; padding: 0 16px; border-radius: 8px;
+  border: 1px solid var(--ink); background: transparent; color: var(--ink);
+  font: 600 15px/1 var(--sans); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.btn.small { min-height: 40px; padding: 0 12px; font-size: 14px; }
+.btn[disabled] { opacity: 0.5; cursor: default; }
+.btn:focus-visible, .seg label:has(input:focus-visible), #preview:focus-visible, input[type="range"]:focus-visible, input[type="color"]:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 2px;
+}
+
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+#preview { display: block; width: 100%; height: auto; border-radius: 3px; background: var(--line); cursor: grab; touch-action: none; }
+#preview:active { cursor: grabbing; }
+.stage-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.hint { color: var(--muted); }
+#meta { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 16px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 0; }
+.row + .row { border-top: 1px solid var(--line); }
+.row > .lab { font-weight: 600; min-width: 84px; }
+.row .ctl { display: flex; align-items: center; gap: 10px; flex: 1 1 220px; justify-content: flex-end; min-width: 0; }
+.row .ctl.grow { justify-content: stretch; }
+.val { font-family: var(--mono); font-size: 14px; min-width: 3.5ch; text-align: right; font-variant-numeric: tabular-nums; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+.seg label { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 64px; padding: 0 16px; cursor: pointer; font-weight: 600; font-size: 15px; }
+.seg label + label { border-left: 1px solid var(--line); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--ink); color: var(--bg); }
+
+.stepper { display: inline-flex; align-items: center; gap: 6px; }
+.stepper .btn { width: 44px; padding: 0; font-size: 22px; font-weight: 500; }
+.stepper output { min-width: 2.2ch; text-align: center; font-family: var(--mono); font-size: 20px; font-variant-numeric: tabular-nums; }
+
+input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); height: 44px; }
+input[type="color"] { width: 56px; height: 44px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; }
+
+.out-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.out-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.tile { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tile canvas { display: block; width: 100%; height: auto; border-radius: 3px; border: 1px solid var(--line); background: var(--surface); }
+.tile-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tile-row .num { color: var(--muted); }
+
+.note { margin: 0; color: var(--muted); font-size: 14px; max-width: 62ch; }
+#status { min-height: 1.4em; font-weight: 500; }
+.hold { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.hold-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.hold-list img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 3px; -webkit-touch-callout: default; }
+.hold-list .mono { color: var(--muted); display: block; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" aria-hidden="true">
+        <path d="M9 2v21h21"/><path d="M2 9h21v23"/>
+      </svg>
+      <h1>Carousel Splitter</h1>
+    </div>
+    <p class="lede">Split one wide image into slides that line up when you swipe. Everything runs on this page, so your image is never uploaded.</p>
+  </header>
+
+  <section class="stage" aria-label="Preview">
+    <div class="stage-top">
+      <button class="btn primary" id="pick" type="button">Choose image</button>
+      <span class="hint mono">Drag the preview to reposition</span>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <canvas id="preview" tabindex="0" aria-label="Wide preview with slice lines. Drag, or use arrow keys, to reposition the image."></canvas>
+    <div id="meta" class="mono"></div>
+  </section>
+
+  <section class="panel" aria-label="Settings">
+    <div class="row">
+      <span class="lab" id="lab-slides">Slides</span>
+      <div class="ctl">
+        <button class="btn small" id="best" type="button">Best fit</button>
+        <div class="stepper" role="group" aria-labelledby="lab-slides">
+          <button class="btn" id="minus" type="button" aria-label="Fewer slides">&minus;</button>
+          <output id="nval" aria-live="polite">3</output>
+          <button class="btn" id="plus" type="button" aria-label="More slides">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lab" id="lab-ratio">Slide shape</span>
+      <div class="ctl">
+        <div class="seg" role="radiogroup" aria-labelledby="lab-ratio">
+          <label><input type="radio" name="ratio" value="4:5" checked>4:5</label>
+          <label><input type="radio" name="ratio" value="1:1">1:1</label>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lab" id="lab-mode">Image fit</span>
+      <div class="ctl">
+        <div class="seg" role="radiogroup" aria-labelledby="lab-mode">
+          <label><input type="radio" name="mode" value="fill" checked>Fill</label>
+          <label><input type="radio" name="mode" value="fit">Fit</label>
+        </div>
+      </div>
+    </div>
+    <div class="row" id="bg-row" hidden>
+      <label class="lab" for="bg">Background</label>
+      <div class="ctl"><input type="color" id="bg" value="#ffffff"></div>
+    </div>
+    <div class="row">
+      <label class="lab" for="zoom">Zoom</label>
+      <div class="ctl grow">
+        <input type="range" id="zoom" min="100" max="300" step="1" value="100">
+        <span class="val" id="zval">100%</span>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lab">Position</span>
+      <div class="ctl"><button class="btn small" id="reset" type="button">Reset position</button></div>
+    </div>
+  </section>
+
+  <section aria-label="Slides" style="display:flex;flex-direction:column;gap:14px">
+    <div class="out-head">
+      <h2>Slides</h2>
+      <div class="out-actions">
+        <div class="seg" role="radiogroup" aria-label="File format">
+          <label><input type="radio" name="fmt" value="jpg" checked>JPG</label>
+          <label><input type="radio" name="fmt" value="png">PNG</label>
+        </div>
+        <button class="btn primary" id="saveall" type="button">Save all</button>
+      </div>
+    </div>
+    <p class="note" id="savenote">Each slide is 1080 px wide. Save all opens your share sheet with every slide in order. Choose Save Images to add them to Photos. On a computer, the slides download as files.</p>
+    <div id="status" class="mono" role="status" aria-live="polite"></div>
+    <ol class="tiles" id="tiles"></ol>
+
+    <div class="hold">
+      <h2 style="font-size:17px">Press and hold method</h2>
+      <p class="note">If the share sheet doesn't work, show the full-size images, then press and hold each one and choose Add to Photos.</p>
+      <div><button class="btn" id="showhold" type="button">Show full-size images</button></div>
+      <ol class="hold-list" id="holdlist"></ol>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var SW = 1080;
+  var state = { src: null, proxy: null, iw: 0, ih: 0, n: 3, ratio: '4:5', mode: 'fill', zoom: 1, ox: 0, oy: 0, bg: '#ffffff', fmt: 'jpg', sample: true };
+  var objUrl = null, holdUrls = [], busy = false;
+
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function slideH() { return state.ratio === '1:1' ? 1080 : 1350; }
+  function say(t) { $('#status').textContent = t || ''; }
+
+  /* Geometry of the image on the full wide canvas (all slides side by side). */
+  function geom() {
+    var W = state.n * SW, H = slideH();
+    var base = state.mode === 'fill' ? Math.max(W / state.iw, H / state.ih) : Math.min(W / state.iw, H / state.ih);
+    var s = base * state.zoom, dw = state.iw * s, dh = state.ih * s;
+    var mx = Math.abs(dw - W) / 2, my = Math.abs(dh - H) / 2;
+    state.ox = clamp(state.ox, -mx, mx);
+    state.oy = clamp(state.oy, -my, my);
+    return { W: W, H: H, dw: dw, dh: dh, x: (W - dw) / 2 + state.ox, y: (H - dh) / 2 + state.oy };
+  }
+
+  function drawComposite(ctx, src) {
+    var g = geom();
+    ctx.fillStyle = state.bg;
+    ctx.fillRect(0, 0, g.W, g.H);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, g.x, g.y, g.dw, g.dh);
+  }
+
+  function token(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function renderPreview() {
+    var g = geom(), c = $('#preview');
+    var PW = Math.min(1800, g.W), k = PW / g.W, PH = Math.round(g.H * k);
+    if (c.width !== PW) c.width = PW;
+    if (c.height !== PH) c.height = PH;
+    var ctx = c.getContext('2d');
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    drawComposite(ctx, state.proxy);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    var accent = token('--accent'), ink = token('--accent-ink');
+    var lw = Math.max(2, PW / 650);
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = accent;
+    ctx.setLineDash([lw * 5, lw * 3.5]);
+    for (var i = 1; i < state.n; i++) {
+      var x = Math.round(i * SW * k);
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, PH); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.strokeRect(lw / 2, lw / 2, PW - lw, PH - lw);
+
+    var fs = Math.max(14, Math.round(PH * 0.055));
+    ctx.font = '500 ' + fs + 'px "DM Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    for (var j = 0; j < state.n; j++) {
+      var bx = Math.round(j * SW * k) + fs * 0.5 + lw * 2, by = fs * 0.5 + lw * 2, bw = fs * 1.5, bh = fs * 1.4;
+      ctx.fillStyle = accent;
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = ink;
+      ctx.fillText(String(j + 1), bx + bw / 2, by + bh / 2 + 1);
+    }
+  }
+
+  function rebuildTiles() {
+    var ol = $('#tiles'), H = slideH(), tw = 360, th = Math.round(tw * H / SW);
+    ol.textContent = '';
+    for (var i = 0; i < state.n; i++) {
+      var li = document.createElement('li'); li.className = 'tile';
+      var cv = document.createElement('canvas'); cv.width = tw; cv.height = th;
+      cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', 'Slide ' + (i + 1) + ' of ' + state.n);
+      var row = document.createElement('div'); row.className = 'tile-row';
+      var num = document.createElement('span'); num.className = 'num mono'; num.textContent = (i + 1) + ' / ' + state.n;
+      var b = document.createElement('button'); b.className = 'btn small'; b.type = 'button';
+      b.textContent = 'Save'; b.setAttribute('aria-label', 'Save slide ' + (i + 1)); b.dataset.i = String(i);
+      row.appendChild(num); row.appendChild(b); li.appendChild(cv); li.appendChild(row); ol.appendChild(li);
+    }
+  }
+
+  function renderThumbs() {
+    var cvs = document.querySelectorAll('#tiles canvas');
+    for (var i = 0; i < cvs.length; i++) {
+      var ctx = cvs[i].getContext('2d'), k = cvs[i].width / SW;
+      ctx.setTransform(k, 0, 0, k, -i * SW * k, 0);
+      drawComposite(ctx, state.proxy);
+    }
+  }
+
+  function updateMeta() {
+    var g = geom();
+    var x0 = Math.max(0, g.x), x1 = Math.min(g.W, g.x + g.dw), y0 = Math.max(0, g.y), y1 = Math.min(g.H, g.y + g.dh);
+    var A = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+    var crop = 1 - A / (g.dw * g.dh), pad = 1 - A / (g.W * g.H), parts = [];
+    if (crop > 0.005) parts.push('crops ' + Math.round(crop * 100) + '% of image');
+    if (pad > 0.005) parts.push('pads ' + Math.round(pad * 100) + '% of canvas');
+    if (!parts.length) parts.push('uses the whole image');
+    $('#meta').textContent = (state.sample ? 'Sample image. ' : '') + g.W + ' × ' + g.H + ' px · ' + state.n + ' slides · ' + parts.join(', ');
+  }
+
+  function renderAll() { renderPreview(); renderThumbs(); updateMeta(); }
+  var raf = 0;
+  function schedule() { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; renderAll(); }); }
+
+  function syncControls() {
+    $('#nval').textContent = state.n;
+    $('#minus').disabled = state.n <= 2;
+    $('#plus').disabled = state.n >= 10;
+    $('#zoom').value = Math.round(state.zoom * 100);
+    $('#zval').textContent = Math.round(state.zoom * 100) + '%';
+    $('#bg-row').hidden = state.mode !== 'fit';
+  }
+
+  function bestN() { return clamp(Math.round(state.iw / state.ih * slideH() / SW), 2, 10); }
+
+  function setN(n) {
+    state.n = clamp(n, 2, 10);
+    syncControls(); clearHold(); rebuildTiles(); renderAll();
+  }
+
+  /* Sample image so the tool opens in a working state. */
+  function makeSample() {
+    var W = 3240, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+    var x = c.getContext('2d');
+    var g = x.createLinearGradient(0, 0, W, 0);
+    g.addColorStop(0, '#f4b49c'); g.addColorStop(0.5, '#8db4dc'); g.addColorStop(1, '#2c3d72');
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    x.fillStyle = '#fff2c4'; x.beginPath(); x.arc(1080, 500, 230, 0, Math.PI * 2); x.fill();
+    function ridge(base, amp, period, phase, col) {
+      x.fillStyle = col; x.beginPath(); x.moveTo(0, H);
+      for (var px = 0; px <= W; px += 16) {
+        x.lineTo(px, base - amp * Math.abs(Math.sin(px / period + phase)) - amp * 0.35 * Math.sin(px / (period * 0.37)));
+      }
+      x.lineTo(W, H); x.closePath(); x.fill();
+    }
+    ridge(930, 190, 300, 0.6, '#5b6fa3');
+    ridge(1060, 170, 240, 2.1, '#2f3f78');
+    ridge(1200, 120, 190, 4.0, '#1b254d');
+    x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = '700 190px "Instrument Sans", sans-serif'; x.fillText('SAMPLE', 2160, 760);
+    x.font = '500 46px "DM Mono", monospace'; x.textAlign = 'left';
+    x.fillText('Choose your own image above', 64, 96);
+    return c;
+  }
+
+  function makeProxy(im, iw, ih) {
+    var m = Math.max(iw, ih);
+    if (m <= 2400) return im;
+    var k = 2400 / m, c = document.createElement('canvas');
+    c.width = Math.round(iw * k); c.height = Math.round(ih * k);
+    var ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(im, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  function setImage(im, iw, ih, isSample) {
+    state.src = im; state.iw = iw; state.ih = ih; state.sample = isSample;
+    state.proxy = makeProxy(im, iw, ih);
+    state.zoom = 1; state.ox = 0; state.oy = 0; state.mode = 'fill';
+    document.querySelector('input[name="mode"][value="fill"]').checked = true;
+    state.n = isSample ? 3 : bestN();
+    syncControls(); clearHold(); rebuildTiles(); renderAll();
+  }
+
+  function loadFile(f) {
+    if (!f) return;
+    if (objUrl) URL.revokeObjectURL(objUrl);
+    objUrl = URL.createObjectURL(f);
+    var im = new Image();
+    im.onload = function () {
+      if (!im.naturalWidth) { say('That file could not be read as an image.'); return; }
+      setImage(im, im.naturalWidth, im.naturalHeight, false);
+      say('Image loaded. Slides set to ' + state.n + ' for the best fit.');
+    };
+    im.onerror = function () { say('That file could not be opened as an image. Try a JPG or PNG.'); };
+    im.src = objUrl;
+  }
+
+  /* Export */
+  function fmtInfo() { return state.fmt === 'png' ? { mime: 'image/png', ext: 'png' } : { mime: 'image/jpeg', ext: 'jpg' }; }
+
+  function slideBlob(i) {
+    var c = document.createElement('canvas'); c.width = SW; c.height = slideH();
+    var ctx = c.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, -i * SW, 0);
+    drawComposite(ctx, state.src);
+    var f = fmtInfo();
+    return new Promise(function (res, rej) {
+      c.toBlob(function (b) { b ? res(b) : rej(new Error('encode failed')); }, f.mime, 0.95);
+    });
+  }
+
+  var prepared = {};
+
+  function fileFor(i) {
+    if (prepared[i]) return Promise.resolve(prepared[i]);
+    var f = fmtInfo(), name = 'carousel-' + String(i + 1).padStart(2, '0') + '.' + f.ext;
+    return slideBlob(i).then(function (blob) {
+      var file = new File([blob], name, { type: f.mime });
+      prepared[i] = file;
+      return file;
+    });
+  }
+
+  function canShareFiles(files) {
+    try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: files })); }
+    catch (e) { return false; }
+  }
+
+  function downloadFiles(files) {
+    files.forEach(function (file, k) {
+      setTimeout(function () {
+        var u = URL.createObjectURL(file), a = document.createElement('a');
+        a.href = u; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(u); }, 5000);
+      }, k * 400);
+    });
+  }
+
+  function setBusy(b) {
+    busy = b;
+    document.querySelectorAll('#saveall, #tiles button').forEach(function (el) { el.disabled = b; });
+  }
+
+  /* Share sheet first (iPad, iPhone, Android), plain downloads on a computer. */
+  function deliver(indices) {
+    if (busy) return;
+    setBusy(true);
+    say('Preparing ' + (indices.length === 1 ? 'slide ' + (indices[0] + 1) : indices.length + ' slides') + '…');
+    Promise.all(indices.map(fileFor)).then(function (files) {
+      if (canShareFiles(files)) {
+        return navigator.share({ files: files }).then(function () {
+          say('Done. If you chose Save Images, they are in Photos.');
+        }).catch(function (e) {
+          var n = e && e.name;
+          if (n === 'AbortError') say('Share cancelled.');
+          else if (n === 'NotAllowedError') say('Ready. Tap the button once more to open the share sheet.');
+          else { downloadFiles(files); say('Downloading ' + files.length + (files.length === 1 ? ' file' : ' files') + '. Check your Files app or Downloads folder.'); }
+        });
+      }
+      downloadFiles(files);
+      say('Downloading ' + files.length + (files.length === 1 ? ' file' : ' files') + '. Check your Files app or Downloads folder.');
+    }).catch(function () {
+      say('Could not prepare the images. Try fewer slides or a smaller photo.');
+    }).then(function () { setBusy(false); });
+  }
+
+  function saveOne(i) { deliver([i]); }
+  function saveAll() { var all = []; for (var i = 0; i < state.n; i++) all.push(i); deliver(all); }
+
+  function clearHold() {
+    holdUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+    holdUrls = [];
+    prepared = {};
+    $('#holdlist').textContent = '';
+  }
+
+  function showHold() {
+    clearHold();
+    say('Preparing full-size images…');
+    var jobs = [];
+    for (var i = 0; i < state.n; i++) jobs.push(slideBlob(i));
+    Promise.all(jobs).then(function (blobs) {
+      var ol = $('#holdlist');
+      blobs.forEach(function (b, i) {
+        var u = URL.createObjectURL(b); holdUrls.push(u);
+        var li = document.createElement('li');
+        var img = document.createElement('img'); img.src = u; img.alt = 'Slide ' + (i + 1) + ' of ' + state.n;
+        var t = document.createElement('span'); t.className = 'mono'; t.textContent = 'Slide ' + (i + 1) + ' of ' + state.n + ' · 1080 × ' + slideH();
+        li.appendChild(img); li.appendChild(t); ol.appendChild(li);
+      });
+      say('Press and hold each image, starting with slide 1.');
+    }).catch(function () { say('Could not prepare the images. Try fewer slides or a smaller photo.'); });
+  }
+
+  /* Wiring */
+  $('#pick').addEventListener('click', function () { $('#file').click(); });
+  $('#file').addEventListener('change', function (e) { loadFile(e.target.files && e.target.files[0]); e.target.value = ''; });
+  $('#minus').addEventListener('click', function () { setN(state.n - 1); });
+  $('#plus').addEventListener('click', function () { setN(state.n + 1); });
+  $('#best').addEventListener('click', function () { setN(bestN()); say('Slides set to ' + state.n + ' for the best fit.'); });
+
+  document.querySelectorAll('input[name="ratio"]').forEach(function (r) {
+    r.addEventListener('change', function () { state.ratio = r.value; clearHold(); rebuildTiles(); renderAll(); });
+  });
+  document.querySelectorAll('input[name="mode"]').forEach(function (r) {
+    r.addEventListener('change', function () { state.mode = r.value; state.ox = 0; state.oy = 0; state.zoom = 1; syncControls(); clearHold(); renderAll(); });
+  });
+  document.querySelectorAll('input[name="fmt"]').forEach(function (r) {
+    r.addEventListener('change', function () { state.fmt = r.value; clearHold(); });
+  });
+  $('#zoom').addEventListener('input', function (e) { state.zoom = e.target.value / 100; $('#zval').textContent = e.target.value + '%'; clearHold(); schedule(); });
+  $('#bg').addEventListener('input', function (e) { state.bg = e.target.value; clearHold(); schedule(); });
+  $('#reset').addEventListener('click', function () { state.ox = 0; state.oy = 0; clearHold(); renderAll(); });
+  $('#saveall').addEventListener('click', saveAll);
+  $('#showhold').addEventListener('click', showHold);
+  $('#tiles').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-i]'); if (b) saveOne(parseInt(b.dataset.i, 10));
+  });
+
+  var pv = $('#preview'), drag = null;
+  pv.addEventListener('pointerdown', function (e) {
+    pv.setPointerCapture(e.pointerId);
+    drag = { x: e.clientX, y: e.clientY, ox: state.ox, oy: state.oy };
+  });
+  pv.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var f = (state.n * SW) / pv.getBoundingClientRect().width;
+    state.ox = drag.ox + (e.clientX - drag.x) * f;
+    state.oy = drag.oy + (e.clientY - drag.y) * f;
+    clearHold(); schedule();
+  });
+  function endDrag() { drag = null; }
+  pv.addEventListener('pointerup', endDrag);
+  pv.addEventListener('pointercancel', endDrag);
+  pv.addEventListener('keydown', function (e) {
+    var d = { ArrowLeft: [-24, 0], ArrowRight: [24, 0], ArrowUp: [0, -24], ArrowDown: [0, 24] }[e.key];
+    if (!d) return;
+    e.preventDefault(); state.ox += d[0]; state.oy += d[1]; clearHold(); schedule();
+  });
+  ['dragover', 'drop'].forEach(function (t) {
+    pv.addEventListener(t, function (e) {
+      e.preventDefault();
+      if (t === 'drop' && e.dataTransfer && e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+    });
+  });
+
+  try { new MutationObserver(schedule).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); } catch (e) {}
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', schedule); } catch (e) {}
+
+  var sample = makeSample();
+  setImage(sample, sample.width, sample.height, true);
+})();
+</script>
+</body>
+</html>
